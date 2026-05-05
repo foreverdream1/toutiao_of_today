@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from fastapi import HTTPException
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.users import User, UserToken
-from schemas.users import UserRequest
+from schemas.users import UserRequest, UserUpdateRequest, UserChangePasswordRequest
 from utils import security
 from utils.security import get_password_hash,verify_password
 
@@ -52,3 +53,38 @@ async def authenticate_user(db:AsyncSession,username:str,password:str):
     if not security.verify_password(password, user.password):
         return None
     return user
+
+#根据token车讯用户：验证token-》查询用户
+async def get_user_by_token(db:AsyncSession,token:str):
+    query = select(UserToken).where(UserToken.token == token)
+    result = await  db.execute(query)
+    db_token = result.scalar_one_or_none()
+    if not db_token or db_token.expires_at<datetime.now():
+        return None
+    query1 = select(User).where(User.id == db_token.user_id)
+    result1 =await db.execute(query1)
+    return result1.scalar_one_or_none()
+
+#更新用户信息
+async def update_user(db:AsyncSession,username:str,user_data:UserUpdateRequest):
+    query = update(User).where(User.username == username).values(
+        **user_data.model_dump(exclude_unset=True, exclude_none=True))
+    result = await db.execute(query)
+    await db.commit()
+    if result.rowcount==0:
+        raise HTTPException(status_code=404,detail="用户不存在")
+
+    #获取更新后的用户
+    update_user = await get_user_by_username(db, username)
+    return update_user
+
+#修改密码：验证旧密码-》新密码加密-》修改密码
+async def change_password(db:AsyncSession,user:User,old_password:str,new_password:str):
+    if not security.verify_password(old_password, user.password):
+        return False
+    password_hash = security.get_password_hash(new_password)
+    user.password=password_hash
+    db.add(User)
+    await db.commit()
+    await db.refresh(user)
+    return True
