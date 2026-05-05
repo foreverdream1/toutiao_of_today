@@ -1,4 +1,9 @@
-from pydantic import BaseModel, Field
+from datetime import datetime
+
+from pydantic import BaseModel, Field, ConfigDict
+
+
+from schemas.base import NewItemBase
 
 
 class FavoriteCheckResponse(BaseModel):
@@ -7,3 +12,21 @@ class FavoriteCheckResponse(BaseModel):
 
 class FavoriteAddRequest(BaseModel):
     news_id:int=Field(...,description="新闻ID")
+
+class FavoriteNewsItemResponse(NewItemBase):
+    favorite_id:int=Field(alias="favoriteId")
+    favorite_time:datetime=Field(alias="favoriteTime")
+    model_config = ConfigDict(
+        populate_by_name=True,
+        from_attributes=True
+    )
+
+class FavoriteListResponse(BaseModel):
+    list:list[FavoriteNewsItemResponse]
+    total:int
+    has_more:bool=Field(alias="hasMore")
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        from_attributes=True
+    )
